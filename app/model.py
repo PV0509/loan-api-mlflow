@@ -20,3 +20,10 @@ THRESHOLD = float(os.getenv("DECISION_THRESHOLD", INFO.get("threshold", 0.5)))
 def predict_default_probability(rows: list[dict]) -> list[float]:
     x = np.array([[float(r[f]) for f in FEATURES] for r in rows])
     return [float(p) for p in _model.predict_proba(x)[:, 1]]
+def risk_band(prob: float) -> str:
+    """Business-friendly label for loan officers."""
+    if prob < 0.2:
+        return "low"
+    if prob < 0.5:
+        return "medium"
+    return "high"
