@@ -4,6 +4,8 @@ import sqlite3
 import threading
 from datetime import UTC, datetime
 
+from app.model import risk_band
+
 DB_PATH = os.getenv("DB_PATH", "/tmp/predictions.db")
 _lock = threading.Lock()
 _conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -62,6 +64,7 @@ def _to_dict(r) -> dict:
         "applicant": {k: r[k] for k in ("income", "loan_amount", "loan_term",
                                         "credit_score", "employment_years")},
         "default_probability": r["default_probability"],
+        "risk_band": risk_band(r["default_probability"]),
         "decision": r["decision"],
         "model_version": r["model_version"],
     }

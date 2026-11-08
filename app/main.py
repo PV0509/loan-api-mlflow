@@ -46,6 +46,7 @@ class Prediction(BaseModel):
     created_at: str
     applicant: Applicant
     default_probability: float
+    risk_band: str
     decision: str
     model_version: str
 
