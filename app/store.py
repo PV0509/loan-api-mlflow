@@ -2,7 +2,7 @@
 import os
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 DB_PATH = os.getenv("DB_PATH", "/tmp/predictions.db")
 _lock = threading.Lock()
@@ -25,7 +25,7 @@ _conn.commit()
 
 
 def add(applicant: dict, prob: float, decision: str, model_version: str) -> dict:
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
     with _lock:
         cur = _conn.execute(
             "insert into predictions (created_at, income, loan_amount, loan_term, credit_score,"
