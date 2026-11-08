@@ -71,7 +71,7 @@ def health():
 def create_prediction(applicant: Applicant, response: Response):
     data = applicant.model_dump()
     prob = model.predict_default_probability([data])[0]
-    decision = "approve" if prob >= model.THRESHOLD else "reject"
+    decision = "reject" if prob >= model.THRESHOLD else "approve"
     pred = store.add(data, round(prob, 6), decision, str(model.INFO["version"]))
     response.headers["Location"] = f"/api/v1/predictions/{pred['id']}"
     return pred
