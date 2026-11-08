@@ -1,0 +1,14 @@
+# Render Blueprint: New → Blueprint → pick this repo
+services:
+  - type: web
+    name: loan-service
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: false          # only the GitHub Actions pipeline deploys (via deploy hook)
+    healthCheckPath: /health
+    envVars:
+      - key: API_KEY
+        sync: false            # you paste the value in the dashboard; never in Git

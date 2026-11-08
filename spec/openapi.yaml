@@ -1,0 +1,120 @@
+openapi: 3.1.0
+info:
+  title: Loan Service API
+  version: 1.0.0
+  description: |
+    Scores loan applicants for probability of default (Module 2 hand-written contract).
+    All /api/ routes need the X-API-Key header.
+servers:
+  - url: https://loan-service.onrender.com
+    description: Production (Render)
+  - url: http://localhost:8000
+    description: Local
+security:
+  - ApiKeyAuth: []
+paths:
+  /health:
+    get:
+      summary: Liveness + deployed version
+      security: []
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /api/v1/predictions:
+    post:
+      summary: Score an applicant (create a prediction)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Applicant" }
+      responses:
+        "201":
+          description: Prediction created
+          headers:
+            Location: { schema: { type: string }, description: URL of the new prediction }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Prediction" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      summary: List predictions (cursor paging)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: after_id, in: query, description: Cursor, id of the last item you have, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: A page of predictions (empty list when none)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Prediction" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/predictions/{pred_id}:
+    parameters:
+      - { name: pred_id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: Get one prediction
+      responses:
+        "200":
+          description: The prediction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Prediction" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a prediction
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    ApiKeyAuth: { type: apiKey, in: header, name: X-API-Key }
+  schemas:
+    Applicant:
+      type: object
+      required: [income, loan_amount, loan_term, credit_score, employment_years]
+      properties:
+        income: { type: number, exclusiveMinimum: 0, description: Monthly income (USD), example: 1500 }
+        loan_amount: { type: number, exclusiveMinimum: 0, example: 6000 }
+        loan_term: { type: integer, minimum: 6, maximum: 120, description: Months, example: 36 }
+        credit_score: { type: number, minimum: 300, maximum: 850, example: 700 }
+        employment_years: { type: integer, minimum: 0, maximum: 60, example: 5 }
+    Prediction:
+      type: object
+      required: [id, created_at, applicant, default_probability, decision, model_version]
+      properties:
+        id: { type: integer }
+        created_at: { type: string, format: date-time }
+        applicant: { $ref: "#/components/schemas/Applicant" }
+        default_probability: { type: number, minimum: 0, maximum: 1 }
+        decision: { type: string, enum: [approve, reject] }
+        model_version: { type: string }
+    Health:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        git_sha: { type: string }
+        model_name: { type: string }
+        model_alias: { type: string }
+        model_version: { type: string }
+    Error:
+      type: object
+      properties:
+        detail: { type: string }
+  responses:
+    Unauthorized:
+      description: Missing or wrong X-API-Key
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: No such prediction
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ValidationError:
+      description: Request body failed validation

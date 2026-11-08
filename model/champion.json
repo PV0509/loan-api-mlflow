@@ -1,0 +1,10 @@
+{
+  "name": "loan-default",
+  "alias": "champion",
+  "version": "1",
+  "run_id": "placeholder-run-export-me",
+  "run_name": "logreg-C1.0-class_weightbalanced",
+  "metrics": {},
+  "threshold": 0.5,
+  "sklearn_version": "1.9.1"
+}

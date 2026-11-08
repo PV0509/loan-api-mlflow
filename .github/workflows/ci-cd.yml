@@ -1,0 +1,80 @@
+name: ci-cd
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check app tests
+      - name: Unit + API tests
+        run: pytest -q
+      - name: Build production image
+        run: docker build -t loan-service:${{ github.sha }} .
+      - name: Container smoke test
+        run: |
+          docker run -d --name svc -p 8000:8000 -e API_KEY=ci-key loan-service:${{ github.sha }}
+          for i in $(seq 1 20); do curl -fsS localhost:8000/health && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/api/v1/predictions)" = 401
+          curl -fsS -H 'X-API-Key: ci-key' localhost:8000/api/v1/predictions
+          docker exec svc whoami | grep -q appuser
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          curl -fsS -X POST "$HOOK" -o /dev/null
+          echo "Deploy requested for ${GITHUB_SHA}"
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait until /health reports this commit
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          MERGED_AT: ${{ github.event.head_commit.timestamp }}
+        run: |
+          for i in $(seq 1 60); do
+            sha=$(curl -fsS "$APP_URL/health" | python3 -c 'import sys,json;print(json.load(sys.stdin)["git_sha"])' 2>/dev/null || true)
+            echo "attempt $i: live sha=${sha:-none} want=${GITHUB_SHA}"
+            if [ "$sha" = "$GITHUB_SHA" ]; then live=1; break; fi
+            sleep 15
+          done
+          [ "${live:-0}" = 1 ] || { echo "::error::new version never went live"; exit 1; }
+          secs=$(( $(date +%s) - $(date -d "$MERGED_AT" +%s) ))
+          echo "MERGE TO LIVE: ${secs}s"
+          echo "### Merge to live: ${secs}s (commit \`${GITHUB_SHA::7}\`)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Production smoke test
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$APP_URL/api/v1/predictions")
+          echo "no key -> $code"; test "$code" = 401
+          code=$(curl -s -o /tmp/p.json -w '%{http_code}' -X POST "$APP_URL/api/v1/predictions" \
+            -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+            -d '{"income":1500,"loan_amount":6000,"loan_term":36,"credit_score":700,"employment_years":5}')
+          echo "with key -> $code"; test "$code" = 201
+          python3 -c 'import json;p=json.load(open("/tmp/p.json"));assert 0<=p["default_probability"]<=1;print("prediction ok:",p["default_probability"],p["decision"])'
