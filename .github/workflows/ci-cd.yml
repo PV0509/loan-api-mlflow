@@ -66,7 +66,7 @@ jobs:
           secs=$(( $(date +%s) - $(date -d "$MERGED_AT" +%s) ))
           echo "MERGE TO LIVE: ${secs}s"
           echo "### Merge to live: ${secs}s (commit \`${GITHUB_SHA::7}\`)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Production smoke test
+            - name: Production smoke test
         env:
           APP_URL: ${{ vars.APP_URL }}
           API_KEY: ${{ secrets.API_KEY }}
@@ -78,3 +78,8 @@ jobs:
             -d '{"income":1500,"loan_amount":6000,"loan_term":36,"credit_score":700,"employment_years":5}')
           echo "with key -> $code"; test "$code" = 201
           python3 -c 'import json;p=json.load(open("/tmp/p.json"));assert 0<=p["default_probability"]<=1;print("prediction ok:",p["default_probability"],p["decision"])'
+          d=$(curl -s -X POST "$APP_URL/api/v1/predictions" -H "X-API-Key: $API_KEY" \
+            -H 'Content-Type: application/json' \
+            -d '{"income":500,"loan_amount":20000,"loan_term":12,"credit_score":450,"employment_years":0}' \
+            | python3 -c 'import sys,json;print(json.load(sys.stdin)["decision"])')
+          echo "risky applicant -> $d"; test "$d" = reject
